@@ -115,6 +115,14 @@
 </div>
 
 <script>
+  // ============================================================
+  //  可配置项
+  // ============================================================
+  // 是否要求点击标点符号作为输入：
+  //   false（默认）：标点始终显示，无需点击，只拼单词
+  //   true：标点也作为 chip，需要按顺序点击（教学更严格但点击次数多）
+  const REQUIRE_PUNCT = false;
+
   let NOVELS = [];
   async function loadNovels() {
     try {
@@ -162,6 +170,9 @@
   }
   function isPunct(tok) { return /^[\p{P}\p{S}]+$/u.test(tok); }
 
+  // 可点击 token 判定：REQUIRE_PUNCT=true 时全部可点，否则跳过纯标点
+  function isClickable(tok) { return REQUIRE_PUNCT ? true : !isPunct(tok); }
+
   const PROGRESS_KEY = "novel_reading_progress_v1";
   function loadProgress() { try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; } catch (e) { return {}; } }
   function saveProgress(p) { try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); } catch (e) {} }
@@ -200,7 +211,6 @@
     });
   }
 
-  // ★ 关键补丁 1：优先用 novel.sentences
   function sentencesOf(novel) {
     if (novel.sentences) return novel.sentences.map(s => s.en);
     if (!novel._sentences) novel._sentences = splitSentences(novel.rawText);
@@ -220,35 +230,58 @@
   function openReader() { readerScreen.classList.add("open"); document.body.classList.add("reader-open"); }
   function closeReader() { readerScreen.classList.remove("open"); document.body.classList.remove("reader-open"); renderShelf(); }
 
+  // 跳过当前无需点击的 token（REQUIRE_PUNCT=true 时不跳过）
+  function autoSkipNonClickable() {
+    while (currentTokenIdx < tokens.length && !isClickable(tokens[currentTokenIdx])) {
+      currentTokenIdx++;
+    }
+  }
+
+  function clickableCount() {
+    return tokens.filter(t => isClickable(t)).length;
+  }
+
   function loadSentence(idx) {
     if (idx < 0 || idx >= sentences.length) return;
     currentIdx = idx;
     tokens = tokenize(sentences[idx]);
     currentTokenIdx = 0;
+    autoSkipNonClickable();
+
     if (idx > 0) { prevSentence.style.display = "block"; prevText.textContent = sentences[idx - 1]; }
     else { prevSentence.style.display = "none"; }
+
     renderSentenceDisplay();
-    // ★ 关键补丁 2：优先用 novel.sentences[idx].zh
+
     const cn = currentNovel.sentences
       ? ((currentNovel.sentences[idx] && currentNovel.sentences[idx].zh) || "")
       : (currentNovel.cn ? (currentNovel.cn[idx] || "") : "");
     sentenceCn.textContent = cn;
     sentenceCn.classList.toggle("hidden", !showCn || !cn);
-    chipOrder = shuffle(tokens.map((_, i) => i));
+
+    chipOrder = shuffle(tokens.map((_, i) => i).filter(i => isClickable(tokens[i])));
     renderChips();
+
     rProgress.textContent = `第 ${idx + 1} / ${sentences.length} 句`;
-    rBottomTip.textContent = `点击下方单词，按正确语序拼出句子（共 ${tokens.length} 个词/标点）`;
+    rBottomTip.textContent = `点击下方单词，按正确语序拼出句子（共 ${clickableCount()} 个词）`;
   }
 
   function renderSentenceDisplay() {
     sentenceDisplay.innerHTML = tokens.map((tok, i) => {
       let cls = "tok";
-      if (i >= currentTokenIdx) cls += " masked"; else cls += " done";
-      if (isPunct(tok)) cls += " punct";
+      if (isPunct(tok) && !REQUIRE_PUNCT) {
+        // 标点始终显示，用专属颜色区分
+        cls += " punct";
+      } else if (i < currentTokenIdx) {
+        cls += " done";
+      } else {
+        cls += " masked";
+      }
       const spacer = (i > 0 && !isPunct(tok)) ? " " : "";
       return `<span class="${cls}">${spacer}${escapeHtml(tok)}</span>`;
     }).join("");
   }
+
   function renderChips() {
     wordChips.innerHTML = "";
     chipOrder.forEach(tokIdx => {
@@ -262,13 +295,19 @@
   }
   function escapeHtml(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
 
+  // ============================================================
+  //  点击 chip：按内容判定，相同 token 可互换
+  // ============================================================
   wordChips.addEventListener("click", e => {
     const chip = e.target.closest(".chip");
     if (!chip || chip.classList.contains("used")) return;
     const tokIdx = parseInt(chip.dataset.index, 10);
-    if (tokIdx === currentTokenIdx) {
+    const expected = tokens[currentTokenIdx];
+
+    if (tokens[tokIdx] === expected) {
       chip.classList.add("used");
       currentTokenIdx++;
+      autoSkipNonClickable();
       renderSentenceDisplay();
       if (currentTokenIdx >= tokens.length) onSentenceComplete();
     } else {
@@ -293,9 +332,10 @@
   rSkip.addEventListener("click", () => { if (currentIdx + 1 < sentences.length) loadSentence(currentIdx + 1); });
   rRestart.addEventListener("click", () => {
     currentTokenIdx = 0;
+    autoSkipNonClickable();
     renderSentenceDisplay();
     renderChips();
-    rBottomTip.textContent = `重新拼这句（共 ${tokens.length} 个词/标点）`;
+    rBottomTip.textContent = `重新拼这句（共 ${clickableCount()} 个词）`;
   });
   rShowAnswer.addEventListener("click", () => {
     currentTokenIdx = tokens.length;
