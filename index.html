@@ -156,8 +156,13 @@
   .sentence-display .tok.punct { color: #c8b878; }
 
   .sentence-cn {
-    text-align: center; font-size: 14px; color: #8a7a5c;
-    margin-top: 14px; line-height: 1.6;
+    margin-top: 16px; padding: 14px 16px;
+    background: rgba(212, 168, 83, 0.07);
+    border: 1px solid rgba(212, 168, 83, 0.18);
+    border-left: 3px solid rgba(212, 168, 83, 0.55);
+    border-radius: 10px;
+    font-size: 16px; color: #d8c9a8; line-height: 1.85;
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", sans-serif;
   }
   .sentence-cn.hidden { display: none; }
 
@@ -266,11 +271,40 @@
   // ============================================================
   //  工具：句子切分 / token 切分 / 乱序
   // ============================================================
+  // 常见缩写，避免 Mr. / Mrs. 之类被误切成句
+  const ABBR = /(Mr|Mrs|Ms|Dr|St|Jr|Sr|vs|etc|Prof|Capt|Lt|Col|Gen|Rev|Hon|No|Fig)$/;
+
+  function splitBlock(block) {
+    // 在一个段落内按 . ! ? 切句；句子必须以空格或结尾收束，避免把缩写拆开
+    const s = block.replace(/\s+/g, " ").trim();
+    if (!s) return [];
+    const out = [];
+    let start = 0, i = 0;
+    const n = s.length;
+    while (i < n) {
+      const ch = s[i];
+      if (ch === "." || ch === "!" || ch === "?") {
+        let j = i + 1;
+        while (j < n && '.!?"\'\u201d\u2019'.includes(s[j])) j++;
+        const boundary = j >= n || s[j] === " ";
+        // 缩写里的点不算句末（比较时排除这个点本身）
+        const isAbbr = ch === "." && j < n && ABBR.test(s.slice(start, i));
+        if (boundary && !isAbbr) {
+          out.push(s.slice(start, j));
+          start = j;
+          i = j;
+          continue;
+        }
+      }
+      i++;
+    }
+    if (start < n) out.push(s.slice(start));
+    return out.map(x => x.trim()).filter(Boolean);
+  }
+
   function splitSentences(text) {
-    // 按 . ! ? 切分，保留标点；过滤空句
-    const raw = text.replace(/\s+/g, " ").trim();
-    const parts = raw.match(/[^.!?]+[.!?]+/g) || [raw];
-    return parts.map(s => s.trim()).filter(s => s.length > 0);
+    // 先按换行分段，再逐段切句（与 novels.json 的中文提示索引保持一致）
+    return text.split(/\n+/).flatMap(splitBlock);
   }
 
   function tokenize(sentence) {
@@ -343,7 +377,7 @@
   let tokens = [];             // 当前句的 token 数组
   let currentTokenIdx = 0;     // 已拼到第几个 token
   let chipOrder = [];          // 乱序后的 token 索引数组
-  let showCn = false;          // 是否显示中文提示
+  let showCn = true;           // 是否显示中文提示（默认显示）
 
   // ============================================================
   //  书架页渲染
@@ -386,8 +420,7 @@
     const saved = progress[novel.id] || 0;
     currentIdx = Math.min(saved, Math.max(0, sentences.length - 1));
     rTitle.textContent = novel.title;
-    showCn = false;
-    sentenceCn.classList.add("hidden");
+    syncCnButton();
     openReader();
     loadSentence(currentIdx);
   }
@@ -423,9 +456,10 @@
     // 原句显示：未拼出的字符透明占位
     renderSentenceDisplay();
 
-    // 中文提示（暂无翻译数据时留空）
-    sentenceCn.textContent = currentNovel.cn ? (currentNovel.cn[idx] || "") : "";
-    sentenceCn.classList.toggle("hidden", !showCn || !sentenceCn.textContent);
+    // 中文提示（novels.json 中 cn 数组与本句索引一一对应）
+    const cn = currentNovel.cn ? (currentNovel.cn[idx] || "") : "";
+    sentenceCn.textContent = cn;
+    sentenceCn.classList.toggle("hidden", !showCn || !cn);
 
     // 乱序单词块
     chipOrder = shuffle(tokens.map((_, i) => i));
@@ -534,10 +568,16 @@
     rBottomTip.textContent = "已显示答案，点 ⏭ 进入下一句";
   });
 
+  // 中文提示按钮状态同步
+  function syncCnButton() {
+    rToggleCn.style.background = showCn ? "rgba(212,168,83,0.3)" : "";
+    rToggleCn.style.color = showCn ? "#e8c878" : "";
+    sentenceCn.classList.toggle("hidden", !showCn || !sentenceCn.textContent);
+  }
+
   rToggleCn.addEventListener("click", () => {
     showCn = !showCn;
-    rToggleCn.style.background = showCn ? "rgba(212,168,83,0.3)" : "";
-    sentenceCn.classList.toggle("hidden", !showCn || !sentenceCn.textContent);
+    syncCnButton();
   });
 
   // ============================================================
