@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#1a1410" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<title>📖 拼读英文小说</title>
+<link rel="manifest" href="./manifest.json" />
+<link rel="apple-touch-icon" href="./icons/icon-192.png" />
+<link rel="icon" type="image/png" href="./icons/favicon-32.png" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+      "Hiragino Sans GB", "Georgia", "Times New Roman", serif;
+    background: radial-gradient(circle at 20% 10%, #2a1f18 0%, #1a1410 60%, #0f0b08 100%);
+    min-height: 100vh;
+    color: #e8dcc4;
+    overscroll-behavior: none;
+  }
+
+  /* ========== 书架页 ========== */
+  .shelf {
+    max-width: 720px;
+    margin: 0 auto;
+    padding: 20px 16px;
+    padding-top: calc(20px + env(safe-area-inset-top));
+    padding-bottom: calc(40px + env(safe-area-inset-bottom));
+  }
+  .shelf-header {
+    text-align: center;
+    margin-bottom: 28px;
+  }
+  .shelf-header h1 {
+    font-size: 26px;
+    background: linear-gradient(135deg, #d4a853, #e8c878);
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    font-weight: 800;
+    letter-spacing: 1px;
+  }
+  .shelf-header .sub {
+    font-size: 13px;
+    color: #8a7a5c;
+    margin-top: 6px;
+  }
+  .novel-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 16px;
+  }
+  .novel-card {
+    background: rgba(212, 168, 83, 0.06);
+    border: 1px solid rgba(212, 168, 83, 0.2);
+    border-radius: 14px;
+    padding: 18px;
+    cursor: pointer;
+    transition: all .2s;
+    display: flex;
+    gap: 14px;
+    align-items: stretch;
+  }
+  .novel-card:hover { background: rgba(212, 168, 83, 0.12); border-color: rgba(212, 168, 83, 0.45); transform: translateY(-2px); }
+  .novel-card:active { transform: translateY(0); }
+  .novel-cover {
+    width: 72px; height: 96px; flex-shrink: 0;
+    background: linear-gradient(135deg, #3d2e1f, #2a1f15);
+    border: 1px solid rgba(212, 168, 83, 0.3);
+    border-radius: 6px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px;
+    box-shadow: 2px 2px 8px rgba(0,0,0,0.4);
+  }
+  .novel-info { flex: 1; min-width: 0; display: flex; flex-direction: column; justify-content: center; }
+  .novel-title { font-size: 16px; font-weight: 700; color: #e8dcc4; margin-bottom: 4px; }
+  .novel-author { font-size: 12px; color: #8a7a5c; margin-bottom: 10px; }
+  .progress-track {
+    height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%; background: linear-gradient(90deg, #d4a853, #e8c878);
+    border-radius: 3px; transition: width .3s;
+  }
+  .progress-text { font-size: 11px; color: #8a7a5c; margin-top: 5px; }
+
+  /* ========== 阅读练习子页面（全屏，从右滑入） ========== */
+  .reader-screen {
+    position: fixed; inset: 0; z-index: 150;
+    background: radial-gradient(circle at 50% 0%, #2a1f18 0%, #1a1410 70%);
+    transform: translateX(100%);
+    transition: transform .28s ease;
+    visibility: hidden;
+    display: flex; flex-direction: column;
+  }
+  .reader-screen.open { transform: translateX(0); visibility: visible; }
+  body.reader-open { overflow: hidden; }
+
+  .reader-panel {
+    max-width: 800px; width: 100%; margin: 0 auto; height: 100%;
+    display: flex; flex-direction: column;
+  }
+
+  /* 顶栏 */
+  .r-topbar {
+    flex: none; display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px; padding-top: calc(10px + env(safe-area-inset-top));
+    border-bottom: 1px solid rgba(212, 168, 83, 0.18);
+    background: rgba(26, 20, 16, 0.85); backdrop-filter: blur(10px);
+  }
+  .r-back {
+    background: rgba(212, 168, 83, 0.12); color: #d4a853; flex: none;
+    border: 1px solid rgba(212, 168, 83, 0.3); border-radius: 10px;
+    padding: 8px 14px; font-size: 14px; cursor: pointer; font-family: inherit;
+  }
+  .r-back:active { background: rgba(212, 168, 83, 0.22); }
+  .r-meta { flex: 1; min-width: 0; }
+  .r-title { font-size: 14px; font-weight: 700; color: #e8dcc4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .r-progress { font-size: 12px; color: #8a7a5c; margin-top: 2px; font-variant-numeric: tabular-nums; }
+  .r-btn {
+    background: rgba(212, 168, 83, 0.12); color: #d4a853; flex: none;
+    border: 1px solid rgba(212, 168, 83, 0.3); border-radius: 10px;
+    padding: 8px 12px; font-size: 13px; cursor: pointer; font-family: inherit;
+  }
+  .r-btn:active { background: rgba(212, 168, 83, 0.22); }
+  .r-btn.danger { color: #e57373; border-color: rgba(229, 115, 115, 0.3); background: rgba(229, 115, 115, 0.08); }
+
+  /* 中部可滚动区 */
+  .r-scroll { flex: 1; overflow-y: auto; padding: 18px 16px; -webkit-overflow-scrolling: touch; }
+
+  .prev-sentence {
+    color: #6a5c44; font-size: 15px; line-height: 1.7; font-style: italic;
+    margin-bottom: 18px; padding-bottom: 14px;
+    border-bottom: 1px dashed rgba(212, 168, 83, 0.15);
+  }
+  .prev-sentence .label { font-size: 11px; color: #5a4c34; font-style: normal; margin-bottom: 4px; }
+
+  .sentence-stage {
+    background: rgba(0,0,0,0.2); border: 1px solid rgba(212, 168, 83, 0.15);
+    border-radius: 14px; padding: 20px; min-height: 120px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .sentence-display {
+    font-size: 20px; line-height: 1.8; letter-spacing: 0.5px;
+    text-align: center; color: #e8dcc4;
+    font-family: Georgia, "Times New Roman", serif;
+    word-break: break-word;
+  }
+  .sentence-display .tok { transition: color .2s; }
+  /* 未拼出的字符：透明占位，宽度一致，页面不跳动 */
+  .sentence-display .tok.masked { color: transparent; }
+  .sentence-display .tok.done { color: #7ec88f; }
+  .sentence-display .tok.punct { color: #c8b878; }
+
+  .sentence-cn {
+    text-align: center; font-size: 14px; color: #8a7a5c;
+    margin-top: 14px; line-height: 1.6;
+  }
+  .sentence-cn.hidden { display: none; }
+
+  /* 底部固定区：单词块 */
+  .r-bottom {
+    flex: none; max-height: 46vh; overflow-y: auto;
+    border-top: 1px solid rgba(212, 168, 83, 0.2);
+    background: rgba(15, 11, 8, 0.95); backdrop-filter: blur(10px);
+    padding: 12px 14px; padding-bottom: calc(14px + env(safe-area-inset-bottom));
+  }
+  .r-bottom-tip { font-size: 12px; color: #6a5c44; margin-bottom: 10px; text-align: center; }
+  .word-chips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; }
+  .chip {
+    background: rgba(212, 168, 83, 0.1); border: 1px solid rgba(212, 168, 83, 0.3);
+    color: #e8dcc4; border-radius: 10px; padding: 12px 16px; user-select: none;
+    font-size: 18px; line-height: 1.3; min-height: 46px;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: all .15s; cursor: pointer;
+    font-family: Georgia, serif;
+  }
+  .chip:active { transform: scale(0.96); }
+  .chip.used { opacity: 0.2; pointer-events: none; text-decoration: line-through; }
+  .chip.wrong { animation: chipShake .3s; background: rgba(229, 115, 115, 0.2); border-color: rgba(229, 115, 115, 0.6); color: #e57373; }
+  @keyframes chipShake {
+    0%, 100% { transform: translateX(0); }
+    25% { transform: translateX(-5px); }
+    75% { transform: translateX(5px); }
+  }
+
+  .r-actions {
+    display: flex; gap: 10px; justify-content: center; margin-top: 12px; flex-wrap: wrap;
+  }
+  .r-actions .r-btn { font-size: 13px; }
+
+  @media (max-width: 480px) {
+    .sentence-display { font-size: 18px; }
+    .chip { font-size: 17px; padding: 11px 14px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- 书架页 -->
+<div class="shelf" id="shelfPage">
+  <div class="shelf-header">
+    <h1>📖 拼读英文小说</h1>
+    <div class="sub">逐句拆分单词 · 点击拼回原句 · 边拼边读</div>
+  </div>
+  <div class="novel-grid" id="novelGrid"></div>
+</div>
+
+<!-- 阅读练习子页面 -->
+<div class="reader-screen" id="readerScreen">
+  <div class="reader-panel">
+    <div class="r-topbar">
+      <button class="r-back" id="rBack">← 书架</button>
+      <div class="r-meta">
+        <div class="r-title" id="rTitle">-</div>
+        <div class="r-progress" id="rProgress">0 / 0</div>
+      </div>
+      <button class="r-btn" id="rToggleCn" title="显示/隐藏中文提示">中</button>
+      <button class="r-btn" id="rSkip" title="跳过本句">⏭</button>
+    </div>
+
+    <div class="r-scroll" id="rScroll">
+      <div class="prev-sentence" id="prevSentence" style="display:none;">
+        <div class="label">上一句</div>
+        <div id="prevText"></div>
+      </div>
+      <div class="sentence-stage">
+        <div class="sentence-display" id="sentenceDisplay"></div>
+      </div>
+      <div class="sentence-cn hidden" id="sentenceCn"></div>
+    </div>
+
+    <div class="r-bottom">
+      <div class="r-bottom-tip" id="rBottomTip">点击下方单词，按正确语序拼出句子</div>
+      <div class="word-chips" id="wordChips"></div>
+      <div class="r-actions">
+        <button class="r-btn" id="rRestart" title="重新拼这句">🔄 重拼</button>
+        <button class="r-btn danger" id="rShowAnswer" title="显示答案">👁 显示答案</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+  // ============================================================
+  //  数据：小说列表从 ./novels.json 加载（数据与逻辑分离）
+  //  加新小说只需往 novels.json 数组里追加对象，无需改动本文件
+  //  每本小说只需提供 rawText，运行时自动切分为句子和单词
+  // ============================================================
+  let NOVELS = [];
+
+  async function loadNovels() {
+    try {
+      const res = await fetch("./novels.json", { cache: "no-cache" });
+      if (!res.ok) throw new Error("HTTP " + res.status);
+      NOVELS = await res.json();
+    } catch (e) {
+      console.error("[novel] 加载 novels.json 失败：", e);
+      NOVELS = [];
+    }
+  }
+
+  // ============================================================
+  //  工具：句子切分 / token 切分 / 乱序
+  // ============================================================
+  function splitSentences(text) {
+    // 按 . ! ? 切分，保留标点；过滤空句
+    const raw = text.replace(/\s+/g, " ").trim();
+    const parts = raw.match(/[^.!?]+[.!?]+/g) || [raw];
+    return parts.map(s => s.trim()).filter(s => s.length > 0);
+  }
+
+  function tokenize(sentence) {
+    // 按空格切分；把词尾标点单独拆成 token
+    return sentence.split(/\s+/).flatMap(w => {
+      // 末尾标点
+      const m = w.match(/^([^\p{P}\p{S}]+)([\p{P}\p{S}]+)$/u);
+      if (m) return [m[1], m[2]];
+      return [w];
+    });
+  }
+
+  function shuffle(arr) {
+    const a = arr.slice();
+    for (let i = a.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [a[i], a[j]] = [a[j], a[i]];
+    }
+    // 确保乱序后和原顺序不完全一致（token 数 > 1 时）
+    if (a.length > 1 && a.every((v, i) => v === arr[i])) {
+      [a[0], a[1]] = [a[1], a[0]];
+    }
+    return a;
+  }
+
+  function isPunct(tok) {
+    return /^[\p{P}\p{S}]+$/u.test(tok);
+  }
+
+  // ============================================================
+  //  进度持久化
+  // ============================================================
+  const PROGRESS_KEY = "novel_reading_progress_v1";
+  function loadProgress() {
+    try { return JSON.parse(localStorage.getItem(PROGRESS_KEY)) || {}; }
+    catch (e) { return {}; }
+  }
+  function saveProgress(p) {
+    try { localStorage.setItem(PROGRESS_KEY, JSON.stringify(p)); } catch (e) {}
+  }
+
+  // ============================================================
+  //  DOM
+  // ============================================================
+  const $ = id => document.getElementById(id);
+  const novelGrid = $("novelGrid");
+  const readerScreen = $("readerScreen");
+  const rBack = $("rBack");
+  const rTitle = $("rTitle");
+  const rProgress = $("rProgress");
+  const rToggleCn = $("rToggleCn");
+  const rSkip = $("rSkip");
+  const rScroll = $("rScroll");
+  const prevSentence = $("prevSentence");
+  const prevText = $("prevText");
+  const sentenceDisplay = $("sentenceDisplay");
+  const sentenceCn = $("sentenceCn");
+  const wordChips = $("wordChips");
+  const rBottomTip = $("rBottomTip");
+  const rRestart = $("rRestart");
+  const rShowAnswer = $("rShowAnswer");
+
+  // ============================================================
+  //  状态
+  // ============================================================
+  let progress = loadProgress();
+  let currentNovel = null;
+  let sentences = [];          // 当前小说的句子数组
+  let currentIdx = 0;          // 当前句子索引
+  let tokens = [];             // 当前句的 token 数组
+  let currentTokenIdx = 0;     // 已拼到第几个 token
+  let chipOrder = [];          // 乱序后的 token 索引数组
+  let showCn = false;          // 是否显示中文提示
+
+  // ============================================================
+  //  书架页渲染
+  // ============================================================
+  function renderShelf() {
+    novelGrid.innerHTML = "";
+    NOVELS.forEach(novel => {
+      const total = (sentencesOf(novel)).length;
+      const done = progress[novel.id] || 0;
+      const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+
+      const card = document.createElement("div");
+      card.className = "novel-card";
+      card.innerHTML = `
+        <div class="novel-cover">${novel.cover || "📖"}</div>
+        <div class="novel-info">
+          <div class="novel-title">${novel.title}</div>
+          <div class="novel-author">${novel.author}</div>
+          <div class="progress-track"><div class="progress-fill" style="width:${pct}%"></div></div>
+          <div class="progress-text">${done} / ${total} 句 · ${pct}%</div>
+        </div>
+      `;
+      card.addEventListener("click", () => openNovel(novel));
+      novelGrid.appendChild(card);
+    });
+  }
+
+  function sentencesOf(novel) {
+    // 缓存切分结果
+    if (!novel._sentences) novel._sentences = splitSentences(novel.rawText);
+    return novel._sentences;
+  }
+
+  // ============================================================
+  //  打开小说 / 子页面开关
+  // ============================================================
+  function openNovel(novel) {
+    currentNovel = novel;
+    sentences = sentencesOf(novel);
+    const saved = progress[novel.id] || 0;
+    currentIdx = Math.min(saved, Math.max(0, sentences.length - 1));
+    rTitle.textContent = novel.title;
+    showCn = false;
+    sentenceCn.classList.add("hidden");
+    openReader();
+    loadSentence(currentIdx);
+  }
+
+  function openReader() {
+    readerScreen.classList.add("open");
+    document.body.classList.add("reader-open");
+  }
+  function closeReader() {
+    readerScreen.classList.remove("open");
+    document.body.classList.remove("reader-open");
+    renderShelf();   // 回书架时刷新进度
+  }
+
+  // ============================================================
+  //  加载一句
+  // ============================================================
+  function loadSentence(idx) {
+    if (idx < 0 || idx >= sentences.length) return;
+    currentIdx = idx;
+    const text = sentences[idx];
+    tokens = tokenize(text);
+    currentTokenIdx = 0;
+
+    // 上一句
+    if (idx > 0) {
+      prevSentence.style.display = "block";
+      prevText.textContent = sentences[idx - 1];
+    } else {
+      prevSentence.style.display = "none";
+    }
+
+    // 原句显示：未拼出的字符透明占位
+    renderSentenceDisplay();
+
+    // 中文提示（暂无翻译数据时留空）
+    sentenceCn.textContent = currentNovel.cn ? (currentNovel.cn[idx] || "") : "";
+    sentenceCn.classList.toggle("hidden", !showCn || !sentenceCn.textContent);
+
+    // 乱序单词块
+    chipOrder = shuffle(tokens.map((_, i) => i));
+    renderChips();
+
+    // 进度
+    rProgress.textContent = `第 ${idx + 1} / ${sentences.length} 句`;
+    rBottomTip.textContent = `点击下方单词，按正确语序拼出句子（共 ${tokens.length} 个词/标点）`;
+  }
+
+  function renderSentenceDisplay() {
+    // 每个 token 渲染为一个 span，未拼出的加 masked（透明占位）
+    sentenceDisplay.innerHTML = tokens.map((tok, i) => {
+      let cls = "tok";
+      if (i >= currentTokenIdx) cls += " masked";
+      else cls += " done";
+      if (isPunct(tok)) cls += " punct";
+      // 标点前不加空格，词前加空格
+      const spacer = (i > 0 && !isPunct(tok)) ? " " : "";
+      return `<span class="${cls}">${spacer}${escapeHtml(tok)}</span>`;
+    }).join("");
+  }
+
+  function renderChips() {
+    wordChips.innerHTML = "";
+    chipOrder.forEach(tokIdx => {
+      const chip = document.createElement("div");
+      chip.className = "chip";
+      chip.dataset.index = tokIdx;
+      if (tokIdx < currentTokenIdx) chip.classList.add("used");
+      chip.textContent = tokens[tokIdx];
+      wordChips.appendChild(chip);
+    });
+  }
+
+  function escapeHtml(s) {
+    const d = document.createElement("div");
+    d.textContent = s;
+    return d.innerHTML;
+  }
+
+  // ============================================================
+  //  点击单词块
+  // ============================================================
+  wordChips.addEventListener("click", e => {
+    const chip = e.target.closest(".chip");
+    if (!chip || chip.classList.contains("used")) return;
+    const tokIdx = parseInt(chip.dataset.index, 10);
+
+    if (tokIdx === currentTokenIdx) {
+      // 正确
+      chip.classList.add("used");
+      currentTokenIdx++;
+      renderSentenceDisplay();
+      if (currentTokenIdx >= tokens.length) {
+        onSentenceComplete();
+      }
+    } else {
+      // 错误：抖动
+      chip.classList.add("wrong");
+      setTimeout(() => chip.classList.remove("wrong"), 300);
+    }
+  });
+
+  function onSentenceComplete() {
+    // 标记本句完成，保存进度
+    if (currentIdx + 1 > (progress[currentNovel.id] || 0)) {
+      progress[currentNovel.id] = currentIdx + 1;
+      saveProgress(progress);
+    }
+    rBottomTip.textContent = "✅ 完成！自动进入下一句...";
+    setTimeout(() => {
+      if (currentIdx + 1 < sentences.length) {
+        loadSentence(currentIdx + 1);
+      } else {
+        rBottomTip.textContent = "🎉 恭喜！你已读完这本小说";
+      }
+    }, 900);
+  }
+
+  // ============================================================
+  //  按钮事件
+  // ============================================================
+  rBack.addEventListener("click", closeReader);
+
+  rSkip.addEventListener("click", () => {
+    if (currentIdx + 1 < sentences.length) loadSentence(currentIdx + 1);
+  });
+
+  rRestart.addEventListener("click", () => {
+    currentTokenIdx = 0;
+    renderSentenceDisplay();
+    renderChips();
+    rBottomTip.textContent = `重新拼这句（共 ${tokens.length} 个词/标点）`;
+  });
+
+  rShowAnswer.addEventListener("click", () => {
+    currentTokenIdx = tokens.length;
+    renderSentenceDisplay();
+    renderChips();
+    // 显示答案也算读过
+    if (currentIdx + 1 > (progress[currentNovel.id] || 0)) {
+      progress[currentNovel.id] = currentIdx + 1;
+      saveProgress(progress);
+    }
+    rBottomTip.textContent = "已显示答案，点 ⏭ 进入下一句";
+  });
+
+  rToggleCn.addEventListener("click", () => {
+    showCn = !showCn;
+    rToggleCn.style.background = showCn ? "rgba(212,168,83,0.3)" : "";
+    sentenceCn.classList.toggle("hidden", !showCn || !sentenceCn.textContent);
+  });
+
+  // ============================================================
+  //  初始化
+  // ============================================================
+  (async function init() {
+    await loadNovels();
+    renderShelf();
+  })();
+</script>
+
+<script>
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(
+      reg => console.log('[PWA] SW registered:', reg.scope),
+      err => console.warn('[PWA] SW failed:', err)
+    );
+  });
+}
+</script>
+</body>
+</html>
